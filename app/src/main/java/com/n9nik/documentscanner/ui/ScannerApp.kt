@@ -68,6 +68,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,6 +77,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.input.pointer.awaitEachGesture
+import androidx.compose.ui.input.pointer.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -509,8 +512,16 @@ private fun AdjustScreen(
 
     val touchRadiusPx = with(density) { 48.dp.toPx() }
 
+    // Corner dragging must win over the screen's vertical scroll: freeze scrolling the
+    // moment a finger lands on the canvas, restore it on lift. Also note the drag
+    // gesture detector is keyed on Unit (not quad): re-keying on quad restarted gesture
+    // detection on every corner move, which cancelled the drag immediately.
+    var scrollEnabled by remember { mutableStateOf(true) }
+    val scrollState = rememberScrollState()
+    val quadNow by rememberUpdatedState(quad)
+
     Column(
-        Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().padding(16.dp).verticalScroll(scrollState, enabled = scrollEnabled),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Drag the corners to fit the document", style = MaterialTheme.typography.titleMedium)
@@ -520,15 +531,29 @@ private fun AdjustScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat())
-                .pointerInput(quad) {
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown()
+                        scrollEnabled = false
+                        try {
+                            do {
+                                val event = awaitPointerEvent()
+                            } while (event.changes.any { it.pressed })
+                        } finally {
+                            scrollEnabled = true
+                        }
+                    }
+                }
+                .pointerInput(Unit) {
                     detectDragGestures(
                         onDragStart = { offset ->
+                            val q = quadNow
                             val scale = size.width / bitmap.width
                             var best = -1
                             var bestD = touchRadiusPx
                             for (i in 0 until 4) {
-                                val cx = quad[i * 2] * scale
-                                val cy = quad[i * 2 + 1] * scale
+                                val cx = q[i * 2] * scale
+                                val cy = q[i * 2 + 1] * scale
                                 val d = hypot((offset.x - cx).toDouble(), (offset.y - cy).toDouble()).toFloat()
                                 if (d < bestD) {
                                     bestD = d
@@ -542,8 +567,9 @@ private fun AdjustScreen(
                         onDrag = { change, _ ->
                             val idx = dragIndex
                             if (idx >= 0) {
+                                val q = quadNow
                                 val scale = size.width / bitmap.width
-                                val updated = quad.copyOf()
+                                val updated = q.copyOf()
                                 updated[idx * 2] =
                                     (change.position.x / scale).coerceIn(0f, bitmap.width.toFloat())
                                 updated[idx * 2 + 1] =
