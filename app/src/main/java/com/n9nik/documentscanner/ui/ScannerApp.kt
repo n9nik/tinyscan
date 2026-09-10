@@ -20,6 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -517,18 +518,28 @@ private fun AdjustScreen(
     // scroll does not steal corner drags.
     val quadNow by rememberUpdatedState(quad)
 
+    // Single screen, no scrolling: the canvas shrinks to fit the space above the
+    // controls so Retake / Add page are always visible without scrolling.
     Column(
-        Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Drag the corners to fit the document", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
 
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat())
-                .pointerInput(Unit) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
+            val fullWidthHeight = maxWidth / ratio
+            val canvasWidth = if (fullWidthHeight <= maxHeight) maxWidth else maxHeight * ratio
+            val canvasHeight = if (fullWidthHeight <= maxHeight) fullWidthHeight else maxHeight
+            Canvas(
+                modifier = Modifier
+                    .width(canvasWidth)
+                    .height(canvasHeight)
+                    .pointerInput(Unit) {
                     detectDragGestures(
                         onDragStart = { offset ->
                             val q = quadNow
@@ -587,8 +598,9 @@ private fun AdjustScreen(
                 drawCircle(Color(0xFF4F46E5), 9.dp.toPx(), c)
             }
         }
+        }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = enhanceMode == EnhanceMode.COLOR,
@@ -615,7 +627,7 @@ private fun AdjustScreen(
                     bitmap = preview.asImageBitmap(),
                     contentDescription = "Cropped preview",
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxWidth().height(220.dp).padding(8.dp)
+                    modifier = Modifier.fillMaxWidth().height(140.dp).padding(8.dp)
                 )
             }
         } else if (isRendering) {
@@ -737,7 +749,7 @@ private fun PagesScreen(
                 enabled = pages.isNotEmpty() && !isWorking,
                 modifier = Modifier.weight(1f)
             ) {
-                Icon(Icons.Filled.Close, contentDescription = null)
+                Icon(Icons.Filled.Save, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Save PDF")
             }
