@@ -532,7 +532,10 @@ private fun AdjustScreen(
                     detectDragGestures(
                         onDragStart = { offset ->
                             val q = quadNow
-                            val scale = size.width / bitmap.width
+                            // NOTE: PointerInputScope.size is IntSize — must convert to Float
+                            // before dividing, or integer division truncates scale to 0 and
+                            // no touch ever lands within a corner's hit radius.
+                            val scale = size.width.toFloat() / bitmap.width
                             var best = -1
                             var bestD = touchRadiusPx
                             for (i in 0 until 4) {
@@ -552,7 +555,7 @@ private fun AdjustScreen(
                             val idx = dragIndex
                             if (idx >= 0) {
                                 val q = quadNow
-                                val scale = size.width / bitmap.width
+                                val scale = size.width.toFloat() / bitmap.width
                                 val updated = q.copyOf()
                                 updated[idx * 2] =
                                     (change.position.x / scale).coerceIn(0f, bitmap.width.toFloat())
