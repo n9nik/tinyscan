@@ -77,8 +77,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.input.pointer.awaitEachGesture
-import androidx.compose.ui.input.pointer.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -512,16 +510,15 @@ private fun AdjustScreen(
 
     val touchRadiusPx = with(density) { 48.dp.toPx() }
 
-    // Corner dragging must win over the screen's vertical scroll: freeze scrolling the
-    // moment a finger lands on the canvas, restore it on lift. Also note the drag
-    // gesture detector is keyed on Unit (not quad): re-keying on quad restarted gesture
-    // detection on every corner move, which cancelled the drag immediately.
-    var scrollEnabled by remember { mutableStateOf(true) }
-    val scrollState = rememberScrollState()
+    // The drag detector is keyed on Unit (not quad): re-keying on quad restarted gesture
+    // detection on every corner move, which cancelled the drag immediately and made the
+    // corners undraggable. Latest quad is read via rememberUpdatedState instead.
+    // Note: detectDragGestures consumes touch slop internally, so the parent vertical
+    // scroll does not steal corner drags.
     val quadNow by rememberUpdatedState(quad)
 
     Column(
-        Modifier.fillMaxSize().padding(16.dp).verticalScroll(scrollState, enabled = scrollEnabled),
+        Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Drag the corners to fit the document", style = MaterialTheme.typography.titleMedium)
@@ -531,19 +528,6 @@ private fun AdjustScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat())
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        awaitFirstDown()
-                        scrollEnabled = false
-                        try {
-                            do {
-                                val event = awaitPointerEvent()
-                            } while (event.changes.any { it.pressed })
-                        } finally {
-                            scrollEnabled = true
-                        }
-                    }
-                }
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragStart = { offset ->
